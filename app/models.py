@@ -1,4 +1,8 @@
 #models.py
+from pathlib import Path
+
+from zipfile import Path
+
 import yt_dlp
 import os
 import threading
@@ -40,7 +44,7 @@ class MediaDownloader(ABC):
             self.error = str(e)
 
 
-# ─── Video Downloader (MP4) ────────────────────────────────────────
+# ─── Video Downloader (MP4) ───────────
 
 class VideoDownloader(MediaDownloader):
     def get_options(self) -> dict:
@@ -51,7 +55,7 @@ class VideoDownloader(MediaDownloader):
         }
 
 
-# ─── Audio Downloader (MP3) ────────────────────────────────────────
+# ─── Audio Downloader (MP3) ───────────────
 
 class AudioDownloader(MediaDownloader):
     def get_options(self) -> dict:
@@ -72,15 +76,19 @@ class DownloadManager:
     def __init__(self):
         self.jobs: dict[str, MediaDownloader] = {}  # job_id → downloader
 
-    def create_job(self, job_id: str, url: str, media_type: str) -> MediaDownloader:
-        if media_type == "audio":
-            downloader = AudioDownloader(url)
-        else:
-            downloader = VideoDownloader(url)
-
-        self.jobs[job_id] = downloader
-        return downloader
-
+def create_job(self, job_id, url, media_type, save_path=None):
+    # If save_path not provided, use a default location
+    if save_path is None:
+        save_path = Path("./downloads") / job_id
+        save_path.mkdir(parents=True, exist_ok=True)
+    
+    self.jobs[job_id] = {
+        "url": url,
+        "media_type": media_type,
+        "save_path": save_path,
+        "status": "pending",
+        "filename": None
+    }
     def start_job(self, job_id: str):
         downloader = self.jobs[job_id]
         thread = threading.Thread(target=downloader.download)
@@ -103,6 +111,4 @@ class DownloadManager:
             os.remove(job.filename)
         self.jobs.pop(job_id, None)
 
-
-# ─── Singleton instance (shared across the app) ───────────────────
 manager = DownloadManager()
