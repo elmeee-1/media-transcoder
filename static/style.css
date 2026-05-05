@@ -1,0 +1,142 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #0f0f0f;
+    color: #fff;
+    font-family:' Trebuchet MS', sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+.container {
+    width: 100%;
+    max-width: 600px;
+    padding: 20px;
+}
+
+h1 {
+    font-size: 45px;
+    text-align: center;
+    color: rgb(175, 6, 6);
+    margin-bottom: 8px;
+}
+
+.subtitle {
+    text-align: center;
+    color: #888;
+    margin-bottom: 30px;
+}
+
+.card {
+    background: #1a1a1a;
+    border-radius: 12px;
+    padding: 100px 20px 20px;
+    margin-bottom: 20px;
+    border: 1px solid #910808;
+}
+
+input[type="text"] {
+    width: 100%;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #333;
+    background: #111;
+    color: #fff;
+    font-size: 1rem;
+    margin-bottom: 16px;
+}
+
+input[type="text"]:focus {
+    border-color: #e00;
+}
+
+.type-selector {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.type-btn {
+    flex: 1;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #333;
+    background: #111;
+    color: #888;
+    cursor: pointer;
+    font-size: 0.95rem;
+    transition: all 0.2s;
+}
+
+.type-btn.active {
+    border-color: #e00;
+    color: #fff;
+    background: #2a0000;
+}
+
+.download-btn {
+    width: 100%;
+    padding: 14px;
+    background: #e00;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.download-btn:hover {
+    background: #c00;
+}
+
+.progress-bar {
+    background: #333;
+    border-radius: 999px;
+    height: 12px;
+    margin: 12px 0;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: #e00;
+    border-radius: 999px;
+    width: 0%;
+    transition: width 0.3s;
+}
+
+#progressPercent {
+    text-align: center;
+    color: #888;
+    font-size: 0.9rem;
+}
+
+#statusText {
+    text-align: center;
+    margin-bottom: 8px;
+    color: #ccc;
+}
+
+.save-btn {
+    width: 100%;
+    margin-top: 16px;
+    padding: 14px;
+    background: #1a6e1a;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.save-btn:hover {
+    background: #155015;
+}

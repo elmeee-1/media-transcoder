@@ -3,20 +3,21 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 import uuid
 import os
+from fastapi.staticfiles import StaticFiles
 from app.models import manager
 from pathlib import Path
 
 app = FastAPI()
 
 templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 DOWNLOAD_BASE = Path("./downloads")
 DOWNLOAD_BASE.mkdir(parents=True, exist_ok=True)
 
-
 @app.get("/")
 def home(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html", {"request": request})
 
 
 @app.post("/download")
@@ -67,3 +68,6 @@ def download_file(job_id: str):
 def delete_job(job_id: str):
     manager.delete_job(job_id)
     return JSONResponse({"message": "Job deleted"})
+
+
+app.mount("/static", StaticFiles(directory="static"), name="static")

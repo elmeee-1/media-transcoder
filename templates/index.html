@@ -3,9 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <title>Media Transcoder</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <h1>Media Transcoder</h1>
-    <p>Server is working!</p>
+
+    <div class="container">
+        <h1>Media Transcoder</h1>
+        <p class="subtitle">Download YouTube videos or extract MP3 audio</p>
+
+        <div class="card">
+            <input type="text" id="urlInput" placeholder="Paste YouTube URL here..." />
+
+            <div class="type-selector">
+                <button class="type-btn active" id="btnVideo">🎥 Video (MP4)</button>
+                <button class="type-btn" id="btnAudio">🎵 Audio (MP3)</button>
+            </div>
+
+            <button class="download-btn" id="btnDownload">Download</button>
+        </div>
+
+        <div class="card" id="progressCard" style="display:none;">
+            <p id="statusText">Starting...</p>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <p id="progressPercent">0%</p>
+            <button class="save-btn" id="saveBtn" style="display:none;">
+                💾 Save File
+            </button>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
 </body>
 </html>

@@ -18,32 +18,33 @@ class MediaDownloader(ABC):
 
     @abstractmethod
     def get_options(self) -> dict:
-        pass
-
+            pass
     def _progress_hook(self, d):
         if d["status"] == "downloading":
             total = d.get("total_bytes") or d.get("total_bytes_estimate", 1)
             downloaded = d.get("downloaded_bytes", 0)
             self.progress = int(downloaded / total * 100)
             self.status = "downloading"
-
         elif d["status"] == "finished":
+            self.progress = 99
+            self.status = "downloading"  # still processing via FFmpeg
+
+    def _postprocessor_hook(self, d):
+        if d["status"] == "finished":
             self.progress = 100
             self.status = "done"
-            self.filename = d["filename"]
+            self.filename = d["info_dict"].get("filepath") or d.get("filepath")
 
     def download(self):
         try:
             opts = self.get_options()
             opts["progress_hooks"] = [self._progress_hook]
-
+            opts["postprocessor_hooks"] = [self._postprocessor_hook]
             with yt_dlp.YoutubeDL(opts) as ydl:
                 ydl.download([self.url])
-
         except Exception as e:
             self.status = "error"
             self.error = str(e)
-
 
 class VideoDownloader(MediaDownloader):
     def get_options(self) -> dict:
@@ -51,20 +52,22 @@ class VideoDownloader(MediaDownloader):
             "format": "bestvideo+bestaudio/best",
             "outtmpl": f"{self.output_dir}/%(title)s.%(ext)s",
             "merge_output_format": "mp4",
+            "ffmpeg_location": "C:\\Users\\mahdi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.1-full_build\\bin",
         }
-
 
 class AudioDownloader(MediaDownloader):
     def get_options(self) -> dict:
         return {
             "format": "bestaudio/best",
             "outtmpl": f"{self.output_dir}/%(title)s.%(ext)s",
+            "ffmpeg_location": "C:\\Users\\mahdi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.1-full_build\\bin",
             "postprocessors": [{
                 "key": "FFmpegExtractAudio",
                 "preferredcodec": "mp3",
                 "preferredquality": "192",
             }],
         }
+        
 
 
 class DownloadManager:
