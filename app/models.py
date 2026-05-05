@@ -1,20 +1,19 @@
-#models.py
 from pathlib import Path
-
-from zipfile import Path
-
 import yt_dlp
 import os
 import threading
 from abc import ABC, abstractmethod
 
+
 class MediaDownloader(ABC):
-    def __init__(self, url: str, output_dir: str = "downloads"):
+    def __init__(self, url: str, output_dir: str):
         self.url = url
-        self.output_dir = output_dir
+        self.output_dir = str(output_dir)
         self.progress = 0
-        self.status = "pending"  # pending → downloading → done / error
+        self.status = "pending"
         self.filename = None
+        self.error = None
+
         os.makedirs(self.output_dir, exist_ok=True)
 
     @abstractmethod
@@ -37,14 +36,14 @@ class MediaDownloader(ABC):
         try:
             opts = self.get_options()
             opts["progress_hooks"] = [self._progress_hook]
+
             with yt_dlp.YoutubeDL(opts) as ydl:
                 ydl.download([self.url])
+
         except Exception as e:
             self.status = "error"
             self.error = str(e)
 
-
-# ─── Video Downloader (MP4) ───────────
 
 class VideoDownloader(MediaDownloader):
     def get_options(self) -> dict:
@@ -54,8 +53,6 @@ class VideoDownloader(MediaDownloader):
             "merge_output_format": "mp4",
         }
 
-
-# ─── Audio Downloader (MP3) ───────────────
 
 class AudioDownloader(MediaDownloader):
     def get_options(self) -> dict:
@@ -70,45 +67,45 @@ class AudioDownloader(MediaDownloader):
         }
 
 
-# ─── Download Manager (Factory Pattern) ───────────────────────────
-
 class DownloadManager:
     def __init__(self):
-        self.jobs: dict[str, MediaDownloader] = {}  # job_id → downloader
+        self.jobs: dict[str, MediaDownloader] = {}
 
-def create_job(self, job_id, url, media_type, save_path=None):
-    # If save_path not provided, use a default location
-    if save_path is None:
-        save_path = Path("./downloads") / job_id
-        save_path.mkdir(parents=True, exist_ok=True)
-    
-    self.jobs[job_id] = {
-        "url": url,
-        "media_type": media_type,
-        "save_path": save_path,
-        "status": "pending",
-        "filename": None
-    }
+    def create_job(self, job_id, url, media_type, save_path):
+        if media_type == "audio":
+            downloader = AudioDownloader(url, save_path)
+        else:
+            downloader = VideoDownloader(url, save_path)
+
+        self.jobs[job_id] = downloader
+
     def start_job(self, job_id: str):
         downloader = self.jobs[job_id]
+
         thread = threading.Thread(target=downloader.download)
         thread.daemon = True
         thread.start()
 
     def get_status(self, job_id: str) -> dict:
         job = self.jobs.get(job_id)
+
         if not job:
             return {"status": "not_found"}
+
         return {
             "status": job.status,
             "progress": job.progress,
             "filename": job.filename,
+            "error": job.error
         }
 
     def delete_job(self, job_id: str):
         job = self.jobs.get(job_id)
+
         if job and job.filename and os.path.exists(job.filename):
             os.remove(job.filename)
+
         self.jobs.pop(job_id, None)
+
 
 manager = DownloadManager()
