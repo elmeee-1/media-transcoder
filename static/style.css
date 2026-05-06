@@ -14,9 +14,9 @@ button {
 }
 :root {
     --radius : 5px;
-    --primary : #FF0000;
-    --second : #777777;
-    --white : white;
+    --primary : #f70404;
+    --second : #ccc;
+    --white : beige;
 }
 
 body {
@@ -75,9 +75,6 @@ form button[type="submit"]:hover {
     scale: 0.95;
 }
 
-
-
-
 .infos {
     background-color: lightgray;
     border-radius: var(--radius);
@@ -118,9 +115,9 @@ footer {
     bottom: 0;
     width: 100%;
     display: flex;
+    justify-content: center;
     align-items: center;
-    justify-content: space-around;
-    padding: 10px 0;
+    padding: 10px ;
 }
 footer a {
     color: rgba(0, 0, 0, 0.8);
