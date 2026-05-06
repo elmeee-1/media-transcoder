@@ -1,0 +1,142 @@
+* {
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+    font-family: "poppins", Arial, Helvetica, sans-serif;
+}
+input {
+    outline: 0;
+    border: 0;
+}
+button {
+    cursor: pointer;
+    border: 0;
+}
+:root {
+    --radius : 5px;
+    --primary : #FF0000;
+    --second : #777777;
+    --white : white;
+}
+
+body {
+    background-color: var(--white);
+}
+
+
+main {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    gap: 20px;
+}
+
+form {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    width: 80%;
+    height: 40px;
+}
+
+form .input-container {
+    border: 1px solid gray;
+    border-radius: var(--radius);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+    padding: 0 10px;
+    width: 40%;
+}
+form .input-container i {
+    color: gray;
+}
+form .input-container input {
+    background-color: transparent;
+    width: 100%;
+}
+form .input-container button {
+    background-color: transparent;
+    color: gray;
+    font-size: 10px;
+}
+/* form button[type="submit"] { */
+form button:nth-child(2) {
+    background-color: var(--primary);
+    color: white;
+    border-radius: var(--radius);
+    padding: 0 10px;
+    transition: 0.2s;
+}
+form button[type="submit"]:hover {
+    scale: 0.95;
+}
+
+
+
+
+.infos {
+    background-color: lightgray;
+    border-radius: var(--radius);
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px 20px;
+    width: 70%;
+    display: none;
+}
+.infos article {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.infos article p {
+    text-transform: capitalize;
+}
+.infos article button {
+    background-color: var(--second);
+    color: white;
+    border-radius: var(--radius);
+    padding: 5px 10px;
+    transition: 0.2s;
+}
+.infos article button.premium {
+    background: linear-gradient(140deg, #f5e6b3, #d4af37, #b8962e);
+    color: black;
+}
+.infos article button.premium:disabled {
+    cursor: no-drop;
+}
+
+
+footer {
+    background-color: rgba(0, 0, 0, 0.1);
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    padding: 10px 0;
+}
+footer a {
+    color: rgba(0, 0, 0, 0.8);
+    text-decoration: none;
+}
+footer p {
+    font-size: 14px;
+    color: rgba(0, 0, 0, 0.8)
+}
+
+
+@media (max-width: 600px) {
+    form {
+        width: 100%;
+    }
+    form .input-container  {
+        width: 50%;
+    }
+}

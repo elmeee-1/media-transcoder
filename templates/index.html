@@ -3,9 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <title>Media Transcoder</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css" integrity="sha512-2SwdPD6INVrV/lHTZbO2nodKhrnDdJK9/kg2XD1r9uGqPo1cUbujc+IYdlYdEErWNu69gVcYgdxlmVmzTWnetw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="/static/script.js" defer></script>
 </head>
 <body>
-    <h1>Media Transcoder</h1>
-    <p>Server is working!</p>
+    <main>
+        <form action="" onsubmit="form(event)">
+            <div class="input-container">
+                <i class="fa-brands fa-youtube"></i>
+                <input id="search" type="text" placeholder="https://www.youtube.com/...." required >
+                <button class="clear" onclick="clearInput()" type="button"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <button type="button" onclick="download()">Download <i class="fa-solid fa-download"></i></button>
+        </form>
+
+        <div class="infos">
+            <article>
+                <p>mp4 :</p>
+                <button>360p</button>
+                <button>480p</button>
+                <button>1080p</button>
+                <button class="premium" disabled>1080p <i class="fa-solid fa-crown"></i></button>
+            </article>
+            <article>
+                <p>mp3 :</p>
+                <button>192kbps</button>
+                <button>256kbps</button>
+                <button>320kbps</button>
+            </article>
+        </div>
+    </main>
+
+    <footer>
+        <p>&copy; Created by :</p>
+        <div>
+            <a href="#1">
+                <i class="fa-brands fa-linkedin"></i>
+            </a>
+            <a href="#2">
+                <i class="fa-brands fa-linkedin"></i>
+            </a>
+        </div>
+    </footer>
 </body>
 </html>
