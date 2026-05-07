@@ -2,10 +2,12 @@ from pathlib import Path
 import yt_dlp
 import os
 import threading
+import time
 from abc import ABC, abstractmethod
 
 
 class MediaDownloader(ABC):
+    """Base class for media downloading with robust YouTube support."""
     
     def __init__(self, url: str, output_dir: str):
         self.url = url
@@ -16,30 +18,48 @@ class MediaDownloader(ABC):
         self.error = None
         
         os.makedirs(self.output_dir, exist_ok=True)
+        os.makedirs(os.path.join(self.output_dir, "cache"), exist_ok=True)
 
     @abstractmethod
     def get_options(self) -> dict:
+        """Get downloader-specific options."""
         pass
     
-    def _base_options(self) -> dict:
+    def _get_base_options(self, retry_attempt: int = 0) -> dict:
+        """Get base yt-dlp options with smart retry logic."""
+        
+        # Rotate user agents based on retry attempt
+        user_agents = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        ]
+        
+        user_agent = user_agents[retry_attempt % len(user_agents)]
+        
         opts = {
             "quiet": False,
             "no_warnings": False,
+            "noprogress": False,
             "socket_timeout": 30,
-            "retries": 15,
-            "fragment_retries": 15,
-            "file_access_retries": 10,
-            "extractor_retries": 10,
+            "retries": 25,
+            "fragment_retries": 25,
+            "file_access_retries": 20,
+            "extractor_retries": 25,
             "http_headers": {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0",
+                "User-Agent": user_agent,
                 "Accept-Language": "en-US,en;q=0.9",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "Accept-Encoding": "gzip, deflate, br",
                 "Connection": "keep-alive",
                 "Upgrade-Insecure-Requests": "1",
                 "Sec-Fetch-Dest": "document",
                 "Sec-Fetch-Mode": "navigate",
                 "Sec-Fetch-Site": "none",
+                "Sec-Ch-Ua": '"Not A(Brand";v="99", "Google Chrome";v="125", "Chromium";v="125"',
+                "Sec-Ch-Ua-Mobile": "?0",
+                "Sec-Ch-Ua-Platform": '"Windows"',
                 "Cache-Control": "max-age=0",
             },
             "geo_bypass": True,
@@ -48,26 +68,42 @@ class MediaDownloader(ABC):
             "allow_unplayable_formats": True,
             "youtube_include_dash_manifest": True,
             "youtube_include_hls_manifest": True,
+            "check_formats": True,
+            "prefer_insecure": False,
+            "outtmpl_na_placeholder": "",
+            "cachedir": os.path.join(self.output_dir, "cache"),
+            "rm_cache_dir": False,
         }
 
-        # Advanced YouTube extractor arguments
+        # Rotate player clients on retry
+        player_clients = [
+            ["android", "tv_embedded", "ios"],
+            ["ios", "tv_embedded", "android", "web"],
+            ["mweb", "web_embedded", "tv_embedded"],
+            ["web", "web_embedded", "mweb", "android"],
+        ]
+        
+        client_set = player_clients[retry_attempt % len(player_clients)]
+
         opts["extractor_args"] = {
             "youtube": {
-                "player_client": ["tv_embedded", "web_embedded", "android", "web"],
-                "player_skip": ["js", "configs"],
+                "player_client": client_set,
+                "player_skip": ["js"],
                 "skip_webpage": False,
+                "fetch_player": True,
                 "lang": ["en"],
             }
         }
 
+        # Use cookies if available
         cookie_path = Path("cookies.txt")
-        
         if cookie_path.exists():
             opts["cookiefile"] = str(cookie_path)
 
         return opts
     
     def _progress_hook(self, d):
+        """Update download progress."""
         if d["status"] == "downloading":
             total = d.get("total_bytes") or d.get("total_bytes_estimate", 1)
             downloaded = d.get("downloaded_bytes", 0)
@@ -78,58 +114,117 @@ class MediaDownloader(ABC):
             self.status = "downloading"
 
     def _postprocessor_hook(self, d):
+        """Handle post-processing completion."""
         if d["status"] == "finished":
             self.progress = 100
             self.status = "done"
             self.filename = d["info_dict"].get("filepath") or d.get("filepath")
 
     def download(self):
-        try:
-            opts = {**self._base_options(), **self.get_options()}
-            opts["progress_hooks"] = [self._progress_hook]
-            opts["postprocessor_hooks"] = [self._postprocessor_hook]
-            
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(self.url, download=True)
-                if not self.filename and info:
-                    self.filename = ydl.prepare_filename(info)
-                    self.progress = 100
-                    self.status = "done"
+        """Download with automatic retry logic and fallback strategies."""
+        max_retries = 3
+        
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    # Exponential backoff: 5s, 10s, 15s
+                    wait_time = 5 * attempt
+                    self.status = "pending"
+                    self.error = f"Retrying... (attempt {attempt + 1}/{max_retries})"
+                    time.sleep(wait_time)
+                
+                opts = {**self._get_base_options(attempt), **self.get_options()}
+                opts["progress_hooks"] = [self._progress_hook]
+                opts["postprocessor_hooks"] = [self._postprocessor_hook]
+                
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    info = ydl.extract_info(self.url, download=True)
+                    if not self.filename and info:
+                        self.filename = ydl.prepare_filename(info)
+                        self.progress = 100
+                        self.status = "done"
+                    return  # Success - exit retry loop
                     
-        except Exception as e:
-            error_msg = str(e).lower()
-            self.status = "error"
-            self.error = str(e)
-            
-            # If it's a bot detection error, provide helpful message
-            if "sign in" in error_msg or "bot" in error_msg or "confirm" in error_msg:
-                self.error = f"YouTube blocked the request. Error: {str(e)[:100]}... Try again in a few seconds."
+            except Exception as e:
+                error_msg = str(e).lower()
+                self.status = "error"
+                self.error = self._parse_error_message(error_msg, str(e))
+                
+                # Only retry on specific recoverable errors
+                if attempt < max_retries - 1:
+                    if any(keyword in error_msg for keyword in [
+                        "player response", 
+                        "unable to extract",
+                        "403",
+                        "429",  # Too many requests
+                        "timeout",
+                        "connection reset",
+                        "failed to extract",
+                    ]):
+                        continue  # Retry with next attempt
+                
+                # Final error - don't retry
+                break
+    
+    def _parse_error_message(self, error_msg: str, full_error: str) -> str:
+        """Parse YouTube errors and provide helpful messages."""
+        
+        if "sign in" in error_msg or "bot" in error_msg:
+            return "🤖 YouTube detected automation. Wait 10 minutes and try again."
+        
+        if "failed to extract any player response" in error_msg or "unable to extract video data" in error_msg:
+            return "❌ Cannot extract video data. Try:\n• A different video\n• In 10 minutes\n• Your own uploaded video"
+        
+        if "video not available" in error_msg or "not available" in error_msg:
+            return "⛔ Video unavailable (deleted, private, or region-blocked)"
+        
+        if "age restricted" in error_msg or "age restriction" in error_msg:
+            return "🔞 Age-restricted (need YouTube login)"
+        
+        if "403" in error_msg or "forbidden" in error_msg:
+            return "⚠️ Access forbidden by YouTube. Try again later."
+        
+        if "429" in error_msg or "too many requests" in error_msg:
+            return "⏳ YouTube rate limit hit. Wait 30 seconds."
+        
+        if "connection" in error_msg or "timeout" in error_msg or "reset" in error_msg:
+            return "🌐 Network error. Check internet connection."
+        
+        # Generic error
+        return f"❌ Error: {full_error[:120]}"
 
 
 class VideoDownloader(MediaDownloader):
+    """Download YouTube videos."""
+    
     def __init__(self, url: str, quality: str = "720p", output_dir: str = "downloads"):
         super().__init__(url, output_dir)
         self.quality = quality
 
     def get_options(self) -> dict:
+        """Get video-specific options."""
         quality_map = {
-            "360p": "best[height<=360]",
-            "480p": "best[height<=480]",
-            "720p": "best[height<=720]",
+            "360p": "best[height<=360]/best",
+            "480p": "best[height<=480]/best",
+            "720p": "best[height<=720]/best",
         }
         return {
             "format": quality_map.get(self.quality, "best"),
             "outtmpl": os.path.join(self.output_dir, "%(title)s.%(ext)s"),
             "merge_output_format": "mp4",
+            "postprocessors": [],
         }
 
 
 class AudioDownloader(MediaDownloader):
+    """Extract audio from YouTube videos as MP3."""
+    
     def __init__(self, url: str, quality: str = "192kbps", output_dir: str = "downloads"):
         super().__init__(url, output_dir)
         self.quality = quality
 
     def get_options(self) -> dict:
+        """Get audio-specific options."""
         quality_map = {
             "128kbps": "128",
             "192kbps": "192",
@@ -147,11 +242,13 @@ class AudioDownloader(MediaDownloader):
 
 
 class DownloadManager:
+    """Manage download jobs."""
     
     def __init__(self):
         self.jobs: dict[str, MediaDownloader] = {}
 
     def create_job(self, job_id: str, url: str, media_type: str, quality: str = "720p") -> MediaDownloader:
+        """Create a new download job."""
         if media_type == "audio":
             downloader = AudioDownloader(url, quality)
         else:
@@ -160,6 +257,7 @@ class DownloadManager:
         return downloader
 
     def start_job(self, job_id: str):
+        """Start a download job in background thread."""
         downloader = self.jobs.get(job_id)
         if not downloader:
             return
@@ -167,6 +265,7 @@ class DownloadManager:
         thread.start()
 
     def get_status(self, job_id: str) -> dict:
+        """Get status of a job."""
         job = self.jobs.get(job_id)
         if not job:
             return {"status": "not_found", "progress": 0}
@@ -178,6 +277,7 @@ class DownloadManager:
         }
 
     def delete_job(self, job_id: str):
+        """Delete a job and clean up files."""
         job = self.jobs.get(job_id)
         if job and job.filename and os.path.exists(job.filename):
             try:
@@ -187,4 +287,5 @@ class DownloadManager:
         self.jobs.pop(job_id, None)
 
 
+# Global manager instance
 manager = DownloadManager()
