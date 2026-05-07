@@ -8,13 +8,14 @@ A full-stack media conversion engine built with **FastAPI** and **yt-dlp** that 
 
 ## ✨ Features
 
-- 🎥 Download YouTube videos in **MP4** format
-- 🎵 Extract audio as **MP3** (192kbps) using FFmpeg
+- 🎥 Download YouTube videos in **MP4** format (360p, 480p, 720p)
+- 🎵 Extract audio as **MP3** (128kbps, 192kbps, 256kbps) using FFmpeg
 - 📊 **Real-time progress bar** that updates every second
 - 💾 **Browser Save dialog** — user chooses where to save the file
-- 🏗️ Clean **OOP architecture** using Abstract Base Classes and Factory Pattern
+- 🏗️ Clean **OOP architecture** using Abstract Base Classes
 - ⚡ **Asynchronous background downloads** using Python threads
 - 🖥️ Minimal dark-themed **responsive UI**
+- 🛡️ **Error handling** with clear user feedback
 
 ---
 
@@ -37,17 +38,203 @@ A full-stack media conversion engine built with **FastAPI** and **yt-dlp** that 
 media-transcoder/
 ├── app/
 │   ├── __init__.py
-│   ├── main.py          # FastAPI routes
-│   └── models.py        # OOP classes (MediaDownloader, VideoDownloader, AudioDownloader, DownloadManager)
+│   ├── main.py          # FastAPI routes and endpoints
+│   └── models.py        # OOP classes (MediaDownloader, Managers, etc.)
 ├── static/
-│   ├── style.css        # Dark theme UI
-│   └── script.js        # Progress bar + fetch logic
+│   ├── style.css        # Dark theme UI styling
+│   └── script.js        # Frontend logic and API calls
 ├── templates/
-│   └── index.html       # Main page
-├── downloads/           # Temporary download folder
-├── requirements.txt
-└── README.md
+│   └── index.html       # Main HTML page
+├── downloads/           # Downloaded files folder (created automatically)
+├── run.py              # Application entry point
+├── requirements.txt     # Python dependencies
+├── .gitignore          # Git ignore rules
+└── README.md           # This file
 ```
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Python 3.11 or higher
+- FFmpeg (required for audio conversion)
+- Windows, macOS, or Linux
+
+### Installation
+
+1. **Clone or download the project:**
+   ```bash
+   cd media-transcoder
+   ```
+
+2. **Create a Python virtual environment:**
+   ```bash
+   python -m venv env
+   ```
+
+3. **Activate the virtual environment:**
+   
+   **Windows:**
+   ```bash
+   env\Scripts\activate
+   ```
+   
+   **macOS/Linux:**
+   ```bash
+   source env/bin/activate
+   ```
+
+4. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+5. **Install FFmpeg:**
+   
+   **Windows (using Chocolatey):**
+   ```bash
+   choco install ffmpeg
+   ```
+   
+   **macOS (using Homebrew):**
+   ```bash
+   brew install ffmpeg
+   ```
+   
+   **Linux (Ubuntu/Debian):**
+   ```bash
+   sudo apt-get install ffmpeg
+   ```
+
+### Running the Application
+
+```bash
+python run.py
+```
+
+The application will start on `http://127.0.0.1:8000`
+
+Open your browser and navigate to the URL to start downloading!
+
+---
+
+## 📚 API Endpoints
+
+### `GET /`
+Serves the main HTML page.
+
+### `POST /download`
+Start a new download job.
+
+**Request body:**
+```json
+{
+  "url": "https://www.youtube.com/watch?v=...",
+  "media_type": "video",
+  "quality": "720p"
+}
+```
+
+**Response:**
+```json
+{
+  "job_id": "uuid-string"
+}
+```
+
+### `GET /status/{job_id}`
+Get the status of a download job.
+
+**Response:**
+```json
+{
+  "status": "downloading|done|error",
+  "progress": 0-100,
+  "filename": "/path/to/file.mp4",
+  "error": null
+}
+```
+
+### `GET /file/{job_id}`
+Download the completed file (only works when status is "done").
+
+### `DELETE /job/{job_id}`
+Delete a job and clean up its files.
+
+---
+
+## 🎨 Customization
+
+### Change Download Quality
+
+Edit the quality buttons in [templates/index.html](templates/index.html) or modify the quality maps in [app/models.py](app/models.py).
+
+### Change Server Port
+
+Edit [run.py](run.py):
+```python
+uvicorn.run(..., port=8080)  # Change 8000 to your desired port
+```
+
+### Change Output Directory
+
+Edit [app/models.py](app/models.py):
+```python
+def __init__(self, url: str, quality: str = "720p", output_dir: str = "downloads"):
+```
+
+---
+
+## 🐛 Troubleshooting
+
+### "FFmpeg not found"
+- Make sure FFmpeg is installed and added to your system PATH
+- Restart your terminal after installing FFmpeg
+
+### "Module not found" errors
+- Ensure your virtual environment is activated
+- Run `pip install -r requirements.txt` again
+
+### Downloads not starting
+- Check the browser console (F12) for errors
+- Verify the URL is valid and accessible
+- Check that the backend server is running
+
+### Files not downloading from browser
+- Some browsers may have download restrictions
+- Try a different browser or check browser download settings
+- Check file permissions in the downloads folder
+
+---
+
+## 📝 Code Quality
+
+The codebase follows these principles:
+- **Clean Code**: Clear naming, proper documentation
+- **OOP Design**: Abstract base classes and inheritance
+- **Error Handling**: Try-catch blocks and user-friendly messages
+- **Separation of Concerns**: Frontend/Backend separation
+
+---
+
+## 📄 License
+
+This project is provided as-is for educational and personal use.
+
+---
+
+## 👥 Contributors
+
+- **Elmehdi Elmellouki**
+- **Younes Amazzal**
+
+---
+
+## ❓ Support
+
+For issues or questions, please open an issue in the repository or contact the maintainers.
 
 ---
 
@@ -147,8 +334,9 @@ DownloadManager (Factory Pattern)
 ### v2.0
 - [ ] 📋 **Download History** — SQLite database to track all past downloads
 - [ ] 🔍 **YouTube API Preview** — show video thumbnail, title and view count before downloading
-- [ ] 📂 **Custom Output Path** — let the user choose a default save folder
-- [ ] 🎚️ **Quality Selector** — choose video resolution (1080p, 720p, 480p)
+- [✅ ] 📂 **Custom Output Path** — let the user choose a default save folder
+- [✅ ] 🎚️ **Quality Selector** — choose video resolution (720p, 480p, 360p)
+- [✅ ] 🎚️ **Quality Selector** — choose audio resolution (256kbps, 190Kbps, 128Kbps)
 
 ### v3.0
 - [ ] 📦 **Batch Downloads** — paste multiple URLs and download them all at once
@@ -168,12 +356,6 @@ DownloadManager (Factory Pattern)
 ## 🤝 Contributing
 
 Pull requests are welcome. For major changes, please open an issue first.
-
----
-
-## 📄 License
-
-This project is licensed under the **MIT License** — see [LICENSE](LICENSE) for details.
 
 ---
 

@@ -1,61 +1,106 @@
+"""
+FastAPI backend for Media Transcoder application.
+Handles YouTube video/audio downloads with real-time progress tracking.
+"""
+
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 import uuid
 import os
-from fastapi.staticfiles import StaticFiles
 from app.models import manager
-from pathlib import Path
 
-app = FastAPI()
+app = FastAPI(title="Media Transcoder", version="1.0.0")
 
+# Add CORS middleware for better cross-origin support
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Setup templates and static files
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-DOWNLOAD_BASE = Path("./downloads")
-DOWNLOAD_BASE.mkdir(parents=True, exist_ok=True)
 
 @app.get("/")
 def home(request: Request):
-    return templates.TemplateResponse(request, "index.html", {"request": request})
+    """Serve the home page."""
+    return templates.TemplateResponse(request, "index.html")
 
 
 @app.post("/download")
 async def start_download(request: Request):
-    data = await request.json()
+    """
+    Start a new download job.
+    
+    Expected JSON body:
+    {
+        "url": "https://...",
+        "media_type": "video" or "audio",
+        "quality": "720p" or "192kbps", etc.
+    }
+    """
+    try:
+        data = await request.json()
+        url = data.get("url", "").strip()
+        media_type = data.get("media_type", "video").lower()
+        quality = data.get("quality", "720p")
 
-    url = data.get("url")
-    media_type = data.get("media_type", "video")
+        if not url:
+            return JSONResponse(
+                {"error": "No URL provided"},
+                status_code=400
+            )
 
-    if not url:
-        return JSONResponse({"error": "No URL provided"}, status_code=400)
+        if media_type not in ["video", "audio"]:
+            return JSONResponse(
+                {"error": "Invalid media_type. Use 'video' or 'audio'."},
+                status_code=400
+            )
 
-    job_id = str(uuid.uuid4())
-    job_dir = DOWNLOAD_BASE / job_id
-    job_dir.mkdir(parents=True, exist_ok=True)
+        job_id = str(uuid.uuid4())
+        manager.create_job(job_id, url, media_type, quality)
+        manager.start_job(job_id)
 
-    manager.create_job(job_id, url, media_type, job_dir)
-    manager.start_job(job_id)
-
-    return JSONResponse({"job_id": job_id})
+        return JSONResponse({"job_id": job_id})
+    
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"Server error: {str(e)}"},
+            status_code=500
+        )
 
 
 @app.get("/status/{job_id}")
 def get_status(job_id: str):
+    """Get the status of a download job."""
     return JSONResponse(manager.get_status(job_id))
 
 
 @app.get("/file/{job_id}")
 def download_file(job_id: str):
+    """Download the completed file."""
     status = manager.get_status(job_id)
 
     if status["status"] != "done":
-        return JSONResponse({"error": "File not ready"}, status_code=400)
+        return JSONResponse(
+            {"error": "File not ready"},
+            status_code=400
+        )
 
     filepath = status["filename"]
 
     if not filepath or not os.path.exists(filepath):
-        return JSONResponse({"error": "File not found"}, status_code=404)
+        return JSONResponse(
+            {"error": "File not found"},
+            status_code=404
+        )
 
     return FileResponse(
         path=filepath,
@@ -66,8 +111,6 @@ def download_file(job_id: str):
 
 @app.delete("/job/{job_id}")
 def delete_job(job_id: str):
+    """Delete a job and clean up its files."""
     manager.delete_job(job_id)
     return JSONResponse({"message": "Job deleted"})
-
-
-app.mount("/static", StaticFiles(directory="static"), name="static")

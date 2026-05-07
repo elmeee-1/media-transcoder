@@ -4,8 +4,8 @@ import os
 import threading
 from abc import ABC, abstractmethod
 
-
 class MediaDownloader(ABC):
+    
     def __init__(self, url: str, output_dir: str):
         self.url = url
         self.output_dir = str(output_dir)
@@ -13,21 +13,22 @@ class MediaDownloader(ABC):
         self.status = "pending"
         self.filename = None
         self.error = None
-
+        
         os.makedirs(self.output_dir, exist_ok=True)
 
     @abstractmethod
     def get_options(self) -> dict:
-            pass
+        pass
+    
     def _progress_hook(self, d):
         if d["status"] == "downloading":
             total = d.get("total_bytes") or d.get("total_bytes_estimate", 1)
             downloaded = d.get("downloaded_bytes", 0)
-            self.progress = int(downloaded / total * 100)
+            self.progress = int(downloaded / total * 100) if total > 0 else 0
             self.status = "downloading"
         elif d["status"] == "finished":
             self.progress = 99
-            self.status = "downloading"  # still processing via FFmpeg
+            self.status = "downloading"
 
     def _postprocessor_hook(self, d):
         if d["status"] == "finished":
@@ -40,60 +41,83 @@ class MediaDownloader(ABC):
             opts = self.get_options()
             opts["progress_hooks"] = [self._progress_hook]
             opts["postprocessor_hooks"] = [self._postprocessor_hook]
-            with yt_dlp.YoutubeDL() as ydl:
+            with yt_dlp.YoutubeDL(opts) as ydl:
                 ydl.download([self.url])
         except Exception as e:
             self.status = "error"
             self.error = str(e)
 
+
 class VideoDownloader(MediaDownloader):
+# Download YouTube videos in specified quality.    
+    def __init__(self, url: str, quality: str = "720p", output_dir: str = "downloads"):
+        super().__init__(url, output_dir)
+        self.quality = quality
+
     def get_options(self) -> dict:
+        quality_map = {
+            "360p": "bestvideo[height<=360]+bestaudio/best[height<=360]",
+            "480p": "bestvideo[height<=480]+bestaudio/best[height<=480]",
+            "720p": "bestvideo[height<=720]+bestaudio/best[height<=720]",
+        }
         return {
-            "format": "bestvideo+bestaudio/best",
-            "outtmpl": f"{self.output_dir}/%(title)s.%(ext)s",
+            "format": quality_map.get(self.quality, "bestvideo+bestaudio/best"),
+            "outtmpl": os.path.join(self.output_dir, "%(title)s.%(ext)s"),
             "merge_output_format": "mp4",
-            "ffmpeg_location": "C:\\Users\\mahdi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.1-full_build\\bin",
+            "quiet": False,
+            "no_warnings": False,
         }
 
 class AudioDownloader(MediaDownloader):
+
+    def __init__(self, url: str, quality: str = "192kbps", output_dir: str = "downloads"):
+        super().__init__(url, output_dir)
+        self.quality = quality
+
     def get_options(self) -> dict:
+        quality_map = {
+            "128kbps": "128",
+            "192kbps": "192",
+            "256kbps": "256",
+        }
         return {
             "format": "bestaudio/best",
-            "outtmpl": f"{self.output_dir}/%(title)s.%(ext)s",
-            "ffmpeg_location": "C:\\Users\\mahdi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.1-full_build\\bin",
+            "outtmpl": os.path.join(self.output_dir, "%(title)s.%(ext)s"),
             "postprocessors": [{
                 "key": "FFmpegExtractAudio",
                 "preferredcodec": "mp3",
-                "preferredquality": "192",
+                "preferredquality": quality_map.get(self.quality, "192"),
             }],
+            "quiet": False,
+            "no_warnings": False,
         }
-        
-
 
 class DownloadManager:
+    
     def __init__(self):
         self.jobs: dict[str, MediaDownloader] = {}
 
-    def create_job(self, job_id, url, media_type, save_path):
+    def create_job(self, job_id: str, url: str, media_type: str, quality: str = "720p") -> MediaDownloader:
         if media_type == "audio":
-            downloader = AudioDownloader(url, save_path)
+            downloader = AudioDownloader(url, quality)
         else:
-            downloader = VideoDownloader(url, save_path)
-
+            downloader = VideoDownloader(url, quality)
         self.jobs[job_id] = downloader
+        return downloader
 
     def start_job(self, job_id: str):
-        downloader = self.jobs[job_id]
+        downloader = self.jobs.get(job_id)
+        if not downloader:
+            return
 
-        thread = threading.Thread(target=downloader.download)
-        thread.daemon = True
+        thread = threading.Thread(target=downloader.download, daemon=True)
         thread.start()
 
     def get_status(self, job_id: str) -> dict:
         job = self.jobs.get(job_id)
 
         if not job:
-            return {"status": "not_found"}
+            return {"status": "not_found", "progress": 0}
 
         return {
             "status": job.status,
@@ -102,13 +126,15 @@ class DownloadManager:
             "error": job.error
         }
 
-    def delete_job(self, job_id: str):
+    def delete_job(self,job_id: str):
         job = self.jobs.get(job_id)
 
         if job and job.filename and os.path.exists(job.filename):
-            os.remove(job.filename)
-
-        self.jobs.pop(job_id, None)
+            try:
+                os.remove(job.filename)
+            except OSError:
+                pass
+        self.jobs.pop(job_id,None)
 
 
 manager = DownloadManager()
