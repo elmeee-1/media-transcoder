@@ -69,7 +69,7 @@ class VideoDownloader(MediaDownloader):
         }
 
 class AudioDownloader(MediaDownloader):
-
+# Download YouTube audio in specified quality.
     def __init__(self, url: str, quality: str = "192kbps", output_dir: str = "downloads"):
         super().__init__(url, output_dir)
         self.quality = quality

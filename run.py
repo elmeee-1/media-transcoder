@@ -1,7 +1,4 @@
-"""
-Entry point for the Media Transcoder application.
-Run this file to start the FastAPI server.
-"""
+#  Run this file to start the FastAPI server.
 
 if __name__ == "__main__":
     import uvicorn
