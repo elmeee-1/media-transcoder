@@ -40,42 +40,29 @@ class MediaDownloader(ABC):
         
         opts = {
             "quiet": False,
-            "verbose": True,
             "no_warnings": False,
             "noprogress": False,
             "socket_timeout": 30,
-            "retries": 25,
-            "fragment_retries": 25,
-            "file_access_retries": 20,
-            "extractor_retries": 25,
+            "retries": 10,
+            "fragment_retries": 10,
+            "file_access_retries": 10,
+            "extractor_retries": 10,
             "http_headers": {
                 "User-Agent": user_agent,
                 "Accept-Language": "en-US,en;q=0.9",
-                "Accept-Encoding": "gzip, deflate",
             },
             "geo_bypass": True,
-            "geo_bypass_country": "US",
             "skip_unavailable_fragments": True,
-            "allow_unplayable_formats": True,
-            "check_formats": True,
             "outtmpl_na_placeholder": "",
             "cachedir": os.path.join(self.output_dir, "cache"),
             "rm_cache_dir": False,
+            "simulate": False,  # Force actual extraction, not just simulation
+            "no_color": True,
         }
 
-        # Rotate player clients on retry
-        player_clients = [
-            ["android", "tv_embedded", "ios"],
-            ["ios", "tv_embedded", "android", "web"],
-            ["mweb", "web_embedded", "tv_embedded"],
-            ["web", "web_embedded", "mweb", "android"],
-        ]
-        
-        client_set = player_clients[retry_attempt % len(player_clients)]
-
+        # Minimal YouTube extractor args - let yt-dlp handle context internally
         opts["extractor_args"] = {
             "youtube": {
-                "player_client": ["web", "ios"],  # Simpler client list
                 "skip_webpage": False,
             }
         }
