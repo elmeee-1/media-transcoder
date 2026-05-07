@@ -92,14 +92,14 @@ class MediaDownloader(ABC):
                 "skip_webpage": False,
                 "fetch_player": True,
                 "lang": ["en"],
+                "innertube_context_override": "mobile",
+                "innertube_api_key": None,
             }
         }
-
-        # Add INNERTUBE_CONTEXT to prevent KeyError
-        # This is required for YouTube data extraction
-        opts["headers"] = {
-            "x-youtube-client-name": "1",
-            "x-youtube-client-version": "2.20250507.00.00",
+        
+        # Use compat_opts to work around extraction issues
+        opts["compat_opts"] = {
+            "youtube.skip_unavailable_videos": True,
         }
 
         # Use cookies if available
@@ -131,6 +131,9 @@ class MediaDownloader(ABC):
         """Download with automatic retry logic and fallback strategies."""
         max_retries = 3
         
+        # Set environment for yt-dlp
+        os.environ["YTDLP_NO_WARNINGS"] = "1"
+        
         for attempt in range(max_retries):
             try:
                 if attempt > 0:
@@ -160,6 +163,7 @@ class MediaDownloader(ABC):
                 # Only retry on specific recoverable errors
                 if attempt < max_retries - 1:
                     if any(keyword in error_msg for keyword in [
+                        "innertube_context",  # NEW: Retry on context errors
                         "player response", 
                         "unable to extract",
                         "403",
@@ -175,6 +179,9 @@ class MediaDownloader(ABC):
     
     def _parse_error_message(self, error_msg: str, full_error: str) -> str:
         """Parse YouTube errors and provide helpful messages."""
+        
+        if "innertube_context" in error_msg or "innertube context" in error_msg:
+            return "🔄 YouTube API context error. Retrying with different configuration..."
         
         if "sign in" in error_msg or "bot" in error_msg:
             return "🤖 YouTube detected automation. Wait 10 minutes and try again."
