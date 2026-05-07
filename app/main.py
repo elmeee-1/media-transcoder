@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import uuid
 import os
+import yt_dlp
 from app.models import manager
 
 app = FastAPI(title="Media Transcoder", version="1.0.0")
@@ -119,3 +120,13 @@ def delete_job(job_id: str):
     """Delete a job and clean up its files."""
     manager.delete_job(job_id)
     return JSONResponse({"message": "Job deleted"})
+
+
+@app.get("/debug")
+def debug_info():
+    """Return debug information for deployed service health checks."""
+    return JSONResponse({
+        "yt_dlp_version": yt_dlp.__version__,
+        "job_count": len(manager.jobs),
+        "downloads_dir": os.path.abspath("downloads"),
+    })

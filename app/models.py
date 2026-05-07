@@ -58,6 +58,7 @@ class MediaDownloader(ABC):
             "rm_cache_dir": False,
             "simulate": False,  # Force actual extraction, not just simulation
             "no_color": True,
+            "js_runtimes": ["deno"],
         }
 
         # Minimal YouTube extractor args - let yt-dlp handle context internally
