@@ -30,7 +30,7 @@ class MediaDownloader(ABC):
         
         # Rotate user agents based on retry attempt
         user_agents = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -93,6 +93,13 @@ class MediaDownloader(ABC):
                 "fetch_player": True,
                 "lang": ["en"],
             }
+        }
+
+        # Add INNERTUBE_CONTEXT to prevent KeyError
+        # This is required for YouTube data extraction
+        opts["headers"] = {
+            "x-youtube-client-name": "1",
+            "x-youtube-client-version": "2.20250507.00.00",
         }
 
         # Use cookies if available
@@ -204,15 +211,17 @@ class VideoDownloader(MediaDownloader):
     def get_options(self) -> dict:
         """Get video-specific options."""
         quality_map = {
-            "360p": "best[height<=360]/best",
-            "480p": "best[height<=480]/best",
-            "720p": "best[height<=720]/best",
+            "360p": "bestvideo[height<=360]+bestaudio/best[height<=360]",
+            "480p": "bestvideo[height<=480]+bestaudio/best[height<=480]",
+            "720p": "bestvideo[height<=720]+bestaudio/best[height<=720]",
         }
         return {
             "format": quality_map.get(self.quality, "best"),
+            "format_sort": ["res", "ext:mp4:m4a"],
             "outtmpl": os.path.join(self.output_dir, "%(title)s.%(ext)s"),
             "merge_output_format": "mp4",
             "postprocessors": [],
+            "quiet": False,
         }
 
 
