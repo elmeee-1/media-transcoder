@@ -4,6 +4,7 @@ import os
 import threading
 import time
 import logging
+import base64, tempfile
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -21,29 +22,28 @@ class MediaDownloader:
 
         os.makedirs(self.output_dir, exist_ok=True)
 
+    def _get_cookies_file(self) -> str | None:
+        b64 = os.environ.get("YOUTUBE_COOKIES_B64")
+        if not b64:
+            return None
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".txt", mode="wb")
+        tmp.write(base64.b64decode(b64))
+        tmp.close()
+        return tmp.name  
+
     def _base_options(self) -> dict:
-
-        BASE_DIR = Path(__file__).resolve().parent.parent
-        COOKIE_FILE = BASE_DIR / "www.youtube.com_cookies.txt"
-
         opts = {
             "quiet": True,
             "no_warnings": True,
-
             "socket_timeout": 30,
-
             "retries": 10,
             "fragment_retries": 10,
             "file_access_retries": 5,
             "extractor_retries": 10,
-
             "force_ipv4": True,
             "geo_bypass": True,
-
             "skip_unavailable_fragments": True,
-
-            "cookiefile": str(COOKIE_FILE),
-
+            "cookiefile": self._get_cookies_file(),  
             "http_headers": {
                 "User-Agent": (
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -52,30 +52,15 @@ class MediaDownloader:
                 ),
                 "Accept-Language": "en-US,en;q=0.9",
             },
-
             "extractor_args": {
                 "youtube": {
-                    "player_client": [
-                        "android",
-                        "web",
-                        "tv_embedded"
-                    ],
-                    "player_skip": [
-                        "webpage",
-                        "configs",
-                        "js"
-                    ],
+                    "player_client": ["android", "web", "tv_embedded"],
+                    "player_skip": ["webpage", "configs", "js"],
                 }
             },
         }
 
-        # REMOVE THIS PROXY IF YOUTUBE STILL BLOCKS YOU
-        proxy = "http://rujjnilm:ngm1m0ee1i52@31.59.20.176:6754"
-
-        if proxy:
-            opts["proxy"] = proxy
-            logger.info("Proxy enabled")
-
+        # proxy removed
         return opts
 
     def _progress_hook(self, d):
