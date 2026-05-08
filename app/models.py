@@ -3,11 +3,15 @@ import yt_dlp
 import os
 import threading
 import time
+import logging
 from abc import ABC, abstractmethod
+
+# Enable logging so you can see yt-dlp output in Render logs
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 
 class MediaDownloader(ABC):
-    """Base class for media downloading with multi-strategy YouTube bypass."""
     
     def __init__(self, url: str, output_dir: str):
         self.url = url
@@ -23,83 +27,19 @@ class MediaDownloader(ABC):
     def get_options(self) -> dict:
         pass
     
-    def _build_strategy(self, attempt: int) -> dict:
-        """Build yt-dlp options with rotating bypass strategies."""
+    def _base_options(self) -> dict:
+        """Base options with forced IPv4 and verbose output for debugging."""
         
-        po_token = os.getenv("YOUTUBE_PO_TOKEN", "")
-        visitor_data = os.getenv("YOUTUBE_VISITOR_DATA", "")
-        cookie_path = Path("cookies.txt")
-        has_cookies = cookie_path.exists()
-        
-        # Strategy rotation based on attempt number
-        strategies = []
-        
-        # Strategy 0: Web client + PO token (best quality, requires env vars)
-        if po_token:
-            strategies.append({
-                "extractor_args": {
-                    "youtube": {
-                        "player_client": ["web"],
-                        "po_token": [po_token],
-                        "visitor_data": [visitor_data],
-                        "player_skip": ["configs", "js"],
-                    }
-                }
-            })
-        
-        # Strategy 1: TV embedded (no auth, medium quality, bypasses most bot checks)
-        strategies.append({
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["tv_embedded"],
-                    "player_skip": ["webpage", "configs", "js"],
-                }
-            }
-        })
-        
-        # Strategy 2: Android client (mobile app API, different IP reputation)
-        strategies.append({
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["android"],
-                    "player_skip": ["configs", "js"],
-                }
-            }
-        })
-        
-        # Strategy 3: iOS client
-        strategies.append({
-            "extractor_args": {
-                "youtube": {
-                    "player_client": ["ios"],
-                    "player_skip": ["configs", "js"],
-                }
-            }
-        })
-        
-        # Strategy 4: Web with cookies (if cookies.txt exists)
-        if has_cookies:
-            strategies.append({
-                "cookiefile": str(cookie_path),
-                "extractor_args": {
-                    "youtube": {
-                        "player_client": ["web"],
-                        "player_skip": ["configs", "js"],
-                    }
-                }
-            })
-        
-        # Pick strategy based on attempt (cycle through)
-        strategy = strategies[attempt % len(strategies)] if strategies else {}
-        
-        base = {
-            "quiet": True,
-            "no_warnings": True,
-            "socket_timeout": 30,
-            "retries": 10,
-            "fragment_retries": 10,
-            "file_access_retries": 5,
-            "extractor_retries": 5,
+        opts = {
+            "quiet": False,           # DEBUG: show yt-dlp output
+            "no_warnings": False,     # DEBUG: show warnings
+            "verbose": True,          # DEBUG: full verbose mode
+            "socket_timeout": 15,     # Don't hang forever
+            "retries": 3,
+            "fragment_retries": 3,
+            "file_access_retries": 3,
+            "extractor_retries": 3,
+            "force_ipv4": True,       # Fix for cloud server hanging [^2^]
             "geo_bypass": True,
             "skip_unavailable_fragments": True,
             "http_headers": {
@@ -107,12 +47,29 @@ class MediaDownloader(ABC):
                 "Accept-Language": "en-US,en;q=0.9",
             },
         }
-        proxy = os.getenv("PROXY_URL", "")
-        if proxy:
-             base["proxy"] = proxy
-        
-        base.update(strategy)
-        return base
+
+        # CRITICAL: Use cookies.txt if it exists
+        cookie_path = Path("cookies.txt")
+        if cookie_path.exists():
+            logger.info(f"Using cookies file: {cookie_path}")
+            opts["cookiefile"] = str(cookie_path)
+            opts["extractor_args"] = {
+                "youtube": {
+                    "player_client": ["web"],
+                    "player_skip": ["configs"],
+                }
+            }
+        else:
+            logger.warning("No cookies.txt found - falling back to tv_embedded")
+            # Fallback to tv_embedded (lower quality but may bypass bot check)
+            opts["extractor_args"] = {
+                "youtube": {
+                    "player_client": ["tv_embedded"],
+                    "player_skip": ["webpage", "configs", "js"],
+                }
+            }
+
+        return opts
     
     def _progress_hook(self, d):
         if d["status"] == "downloading":
@@ -120,6 +77,7 @@ class MediaDownloader(ABC):
             downloaded = d.get("downloaded_bytes", 0)
             self.progress = int(downloaded / total * 100) if total > 0 else 0
             self.status = "downloading"
+            logger.info(f"Progress: {self.progress}%")
         elif d["status"] == "finished":
             self.progress = 99
             self.status = "downloading"
@@ -129,55 +87,27 @@ class MediaDownloader(ABC):
             self.progress = 100
             self.status = "done"
             self.filename = d["info_dict"].get("filepath") or d.get("filepath")
+            logger.info(f"Done: {self.filename}")
 
     def download(self):
-        max_retries = 4
-        
-        for attempt in range(max_retries):
-            try:
-                if attempt > 0:
-                    wait = 3 * attempt
-                    self.status = "pending"
-                    time.sleep(wait)
-                
-                opts = {**self._build_strategy(attempt), **self.get_options()}
-                opts["progress_hooks"] = [self._progress_hook]
-                opts["postprocessor_hooks"] = [self._postprocessor_hook]
-                
-                with yt_dlp.YoutubeDL(opts) as ydl:
-                    info = ydl.extract_info(self.url, download=True)
-                    if not self.filename and info:
-                        self.filename = ydl.prepare_filename(info)
-                        self.progress = 100
-                        self.status = "done"
-                    return
+        try:
+            opts = {**self._base_options(), **self.get_options()}
+            opts["progress_hooks"] = [self._progress_hook]
+            opts["postprocessor_hooks"] = [self._postprocessor_hook]
+            
+            logger.info(f"Starting download with options: {opts.get('extractor_args')}")
+            
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(self.url, download=True)
+                if not self.filename and info:
+                    self.filename = ydl.prepare_filename(info)
+                    self.progress = 100
+                    self.status = "done"
                     
-            except Exception as e:
-                error_msg = str(e).lower()
-                self.status = "error"
-                
-                # Check if we should try next strategy
-                is_recoverable = any(k in error_msg for k in [
-                    "bot", "sign in", "player response", "innertube",
-                    "unable to extract", "403", "429", "timeout"
-                ])
-                
-                if attempt < max_retries - 1 and is_recoverable:
-                    continue
-                
-                self.error = self._format_error(error_msg, str(e))
-                break
-    
-    def _format_error(self, error_msg: str, full: str) -> str:
-        if "bot" in error_msg or "sign in" in error_msg:
-            return "YouTube blocked this request. Try: 1) Add PO_TOKEN env var, 2) Upload cookies.txt, or 3) Use a proxy."
-        if "403" in error_msg:
-            return "Access denied by YouTube. Try again in 10 minutes or use a different video."
-        if "not available" in error_msg:
-            return "Video unavailable (private, deleted, or region-blocked)."
-        if "ffmpeg" in error_msg:
-            return "Server missing FFmpeg. Audio conversion failed."
-        return f"Error: {full[:150]}"
+        except Exception as e:
+            logger.error(f"Download failed: {str(e)}")
+            self.status = "error"
+            self.error = str(e)
 
 
 class VideoDownloader(MediaDownloader):
