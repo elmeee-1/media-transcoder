@@ -24,50 +24,40 @@ class MediaDownloader:
         opts = {
             "quiet": True,
             "no_warnings": True,
-            "socket_timeout": 15,
-            "retries": 5,
-            "fragment_retries": 5,
+            "socket_timeout": 30,
+            "retries": 10,
+            "fragment_retries": 10,
+            "file_access_retries": 5,
+            "extractor_retries": 10,
             "force_ipv4": True,
             "geo_bypass": True,
+            "skip_unavailable_fragments": True,
             "http_headers": {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Accept-Language": "en-US,en;q=0.9",
             },
-                }
+        }
+
+        proxy = "http://rujjnilm:ngm1m0ee1i52@31.59.20.176:6754"
         
-        proxy = os.getenv("PROXY_URL", "")
+        
         if proxy:
             opts["proxy"] = proxy
-            logger.info(f"Using proxy")
-        
+            logger.info("Proxy enabled")
+
         if use_tv:
-            # tv_embedded bypasses bot check, limited to 720p max
             opts["extractor_args"] = {
                 "youtube": {
                     "player_client": ["tv_embedded"],
                     "player_skip": ["webpage", "configs", "js"],
                 }
             }
-            logger.info("Using tv_embedded client")
         else:
-            # Fallback: web client + cookies (if available)
-            cookie_path = Path("cookies.txt")
-            if cookie_path.exists():
-                opts["cookiefile"] = str(cookie_path)
-                opts["extractor_args"] = {
-                    "youtube": {
-                        "player_client": ["web"],
-                        "player_skip": ["configs"],
-                    }
+            opts["extractor_args"] = {
+                "youtube": {
+                    "player_client": ["android"],
                 }
-                logger.info("Using web client with cookies")
-            else:
-                opts["extractor_args"] = {
-                    "youtube": {
-                        "player_client": ["android"],
-                    }
-                }
-                logger.info("Using android client (no cookies)")
+            }
 
         return opts
     
@@ -87,16 +77,21 @@ class MediaDownloader:
             self.filename = d["info_dict"].get("filepath") or d.get("filepath")
 
     def download(self):
-        # Try tv_embedded first
-        for attempt, use_tv in enumerate([True, False]):
+        strategies = [
+            ("tv_embedded", True),
+            ("android", False),
+        ]
+        
+        for name, use_tv in strategies:
             try:
-                if attempt > 0:
-                    self.status = "pending"
-                    time.sleep(3)
+                self.status = "pending"
+                time.sleep(2)
                 
                 opts = {**self._base_options(use_tv), **self.get_options()}
                 opts["progress_hooks"] = [self._progress_hook]
                 opts["postprocessor_hooks"] = [self._postprocessor_hook]
+                
+                logger.info(f"Trying {name}...")
                 
                 with yt_dlp.YoutubeDL(opts) as ydl:
                     info = ydl.extract_info(self.url, download=True)
@@ -104,21 +99,22 @@ class MediaDownloader:
                         self.filename = ydl.prepare_filename(info)
                         self.progress = 100
                         self.status = "done"
+                    logger.info(f"Success with {name}!")
                     return
                     
             except Exception as e:
                 error_msg = str(e).lower()
-                logger.error(f"Attempt {attempt + 1} failed: {error_msg[:100]}")
+                logger.error(f"{name} failed: {error_msg[:100]}")
                 
-                if "bot" in error_msg or "sign in" in error_msg:
-                    continue  # Try next strategy
+                if "timed out" in error_msg or "timeout" in error_msg:
+                    continue
                 
                 self.status = "error"
                 self.error = str(e)[:200]
                 return
         
         self.status = "error"
-        self.error = "YouTube blocked all attempts. Try a proxy or different video."
+        self.error = "All attempts failed. Check proxy or try another video."
 
     def get_options(self) -> dict:
         raise NotImplementedError
