@@ -4,14 +4,12 @@ import os
 import threading
 import time
 import logging
-from abc import ABC, abstractmethod
 
-# Enable logging so you can see yt-dlp output in Render logs
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class MediaDownloader(ABC):
+class MediaDownloader:
     
     def __init__(self, url: str, output_dir: str):
         self.url = url
@@ -20,54 +18,56 @@ class MediaDownloader(ABC):
         self.status = "pending"
         self.filename = None
         self.error = None
-        
         os.makedirs(self.output_dir, exist_ok=True)
 
-    @abstractmethod
-    def get_options(self) -> dict:
-        pass
-    
-    def _base_options(self) -> dict:
-        """Base options with forced IPv4 and verbose output for debugging."""
-        
+    def _base_options(self, use_tv: bool = True) -> dict:
         opts = {
-            "quiet": False,           # DEBUG: show yt-dlp output
-            "no_warnings": False,     # DEBUG: show warnings
-            "verbose": True,          # DEBUG: full verbose mode
-            "socket_timeout": 15,     # Don't hang forever
-            "retries": 3,
-            "fragment_retries": 3,
-            "file_access_retries": 3,
-            "extractor_retries": 3,
-            "force_ipv4": True,       # Fix for cloud server hanging [^2^]
+            "quiet": True,
+            "no_warnings": True,
+            "socket_timeout": 15,
+            "retries": 5,
+            "fragment_retries": 5,
+            "force_ipv4": True,
             "geo_bypass": True,
-            "skip_unavailable_fragments": True,
             "http_headers": {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Accept-Language": "en-US,en;q=0.9",
             },
-        }
-
-        # CRITICAL: Use cookies.txt if it exists
-        cookie_path = Path("cookies.txt")
-        if cookie_path.exists():
-            logger.info(f"Using cookies file: {cookie_path}")
-            opts["cookiefile"] = str(cookie_path)
-            opts["extractor_args"] = {
-                "youtube": {
-                    "player_client": ["web"],
-                    "player_skip": ["configs"],
                 }
-            }
-        else:
-            logger.warning("No cookies.txt found - falling back to tv_embedded")
-            # Fallback to tv_embedded (lower quality but may bypass bot check)
+        
+        proxy = os.getenv("PROXY_URL", "")
+        if proxy:
+            opts["proxy"] = proxy
+            logger.info(f"Using proxy")
+        
+        if use_tv:
+            # tv_embedded bypasses bot check, limited to 720p max
             opts["extractor_args"] = {
                 "youtube": {
                     "player_client": ["tv_embedded"],
                     "player_skip": ["webpage", "configs", "js"],
                 }
             }
+            logger.info("Using tv_embedded client")
+        else:
+            # Fallback: web client + cookies (if available)
+            cookie_path = Path("cookies.txt")
+            if cookie_path.exists():
+                opts["cookiefile"] = str(cookie_path)
+                opts["extractor_args"] = {
+                    "youtube": {
+                        "player_client": ["web"],
+                        "player_skip": ["configs"],
+                    }
+                }
+                logger.info("Using web client with cookies")
+            else:
+                opts["extractor_args"] = {
+                    "youtube": {
+                        "player_client": ["android"],
+                    }
+                }
+                logger.info("Using android client (no cookies)")
 
         return opts
     
@@ -77,37 +77,51 @@ class MediaDownloader(ABC):
             downloaded = d.get("downloaded_bytes", 0)
             self.progress = int(downloaded / total * 100) if total > 0 else 0
             self.status = "downloading"
-            logger.info(f"Progress: {self.progress}%")
         elif d["status"] == "finished":
             self.progress = 99
-            self.status = "downloading"
 
     def _postprocessor_hook(self, d):
         if d["status"] == "finished":
             self.progress = 100
             self.status = "done"
             self.filename = d["info_dict"].get("filepath") or d.get("filepath")
-            logger.info(f"Done: {self.filename}")
 
     def download(self):
-        try:
-            opts = {**self._base_options(), **self.get_options()}
-            opts["progress_hooks"] = [self._progress_hook]
-            opts["postprocessor_hooks"] = [self._postprocessor_hook]
-            
-            logger.info(f"Starting download with options: {opts.get('extractor_args')}")
-            
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(self.url, download=True)
-                if not self.filename and info:
-                    self.filename = ydl.prepare_filename(info)
-                    self.progress = 100
-                    self.status = "done"
+        # Try tv_embedded first
+        for attempt, use_tv in enumerate([True, False]):
+            try:
+                if attempt > 0:
+                    self.status = "pending"
+                    time.sleep(3)
+                
+                opts = {**self._base_options(use_tv), **self.get_options()}
+                opts["progress_hooks"] = [self._progress_hook]
+                opts["postprocessor_hooks"] = [self._postprocessor_hook]
+                
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    info = ydl.extract_info(self.url, download=True)
+                    if not self.filename and info:
+                        self.filename = ydl.prepare_filename(info)
+                        self.progress = 100
+                        self.status = "done"
+                    return
                     
-        except Exception as e:
-            logger.error(f"Download failed: {str(e)}")
-            self.status = "error"
-            self.error = str(e)
+            except Exception as e:
+                error_msg = str(e).lower()
+                logger.error(f"Attempt {attempt + 1} failed: {error_msg[:100]}")
+                
+                if "bot" in error_msg or "sign in" in error_msg:
+                    continue  # Try next strategy
+                
+                self.status = "error"
+                self.error = str(e)[:200]
+                return
+        
+        self.status = "error"
+        self.error = "YouTube blocked all attempts. Try a proxy or different video."
+
+    def get_options(self) -> dict:
+        raise NotImplementedError
 
 
 class VideoDownloader(MediaDownloader):
@@ -152,9 +166,9 @@ class AudioDownloader(MediaDownloader):
 
 class DownloadManager:
     def __init__(self):
-        self.jobs: dict[str, MediaDownloader] = {}
+        self.jobs = {}
 
-    def create_job(self, job_id: str, url: str, media_type: str, quality: str = "720p") -> MediaDownloader:
+    def create_job(self, job_id: str, url: str, media_type: str, quality: str = "720p"):
         if media_type == "audio":
             downloader = AudioDownloader(url, quality)
         else:
