@@ -24,11 +24,13 @@ class MediaDownloader:
 
     def _get_cookies_file(self) -> str | None:
         b64 = os.environ.get("YOUTUBE_COOKIES_B64")
+        logger.info(f"Cookies env var present: {bool(b64)}")  #temp
         if not b64:
             return None
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".txt", mode="wb")
         tmp.write(base64.b64decode(b64))
         tmp.close()
+        logger.info(f"Cookies file written to: {tmp.name}") #temp
         return tmp.name  
 
     def _base_options(self) -> dict:
